@@ -1,0 +1,11 @@
+{-# language KindSignatures #-}
+
+signature ConIdentifier where
+
+import qualified Data.Kind as GHC
+
+data ConIdentifier
+data ConIdentifierMap :: GHC.Type -> GHC.Type
+
+lookup :: ConIdentifier -> ConIdentifierMap a -> Maybe a
+

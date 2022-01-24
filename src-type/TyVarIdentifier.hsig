@@ -1,0 +1,6 @@
+signature TyVarIdentifier where
+
+data TyVarIdentifier
+
+-- See note in ConIdentifier
+instance Eq TyVarIdentifier

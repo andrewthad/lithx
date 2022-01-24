@@ -1,0 +1,4 @@
+signature Sig where
+
+data ConIdentifier
+data TyVarIdentifier

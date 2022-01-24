@@ -1,0 +1,20 @@
+{-# language KindSignatures #-}
+
+signature FieldIdentifier where
+
+import qualified Data.Kind as GHC
+
+data FieldIdentifier
+
+-- During typesynth, FieldCollection is IntMap or equivalent.
+data FieldCollection :: GHC.Type -> GHC.Type
+
+instance Traversable FieldCollection
+
+zipM_ :: Monad m
+  => (a -> b -> m c)
+  -> FieldCollection a
+  -> FieldCollection b
+  -> m ()
+
+sameKeys :: FieldCollection a -> FieldCollection b -> Bool

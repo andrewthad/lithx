@@ -1,0 +1,24 @@
+# Notes
+
+The compilation stages are roughly:
+
+* E-Exprs (uses library)
+* Syntax (unresolved names)
+* Untyped (resolved names)
+* Typed (typechecking completed)
+* Monomorphized
+
+Important types are:
+
+* Type (references Type)
+* Term (references Lit, Term, and Type)
+* Lit (references Lit, Term, and Type)
+
+# Thoughts on Hiding Details
+
+Keeping these opaque rules out possible bad implementations. Where else
+could something similar be used? During typechecking, we don't particularly
+care about the values of integer and bits literals, so we could make
+literals more opaque to the typechecker.
+Similarly, certain optimization passes do not need to inspect types, so
+we could make them agnostic to type annotations on terms.

@@ -1,0 +1,9 @@
+{-# language KindSignatures #-}
+
+signature Sig where
+
+import qualified Data.Kind as GHC
+
+data TermTypeAnnotation :: GHC.Type -> GHC.Type
+data BindingIdentifier
+data FieldIdentifier

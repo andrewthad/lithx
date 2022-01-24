@@ -1,0 +1,10 @@
+{-# language KindSignatures #-}
+
+signature FunctionTypeAnnotation where
+
+import qualified Data.Kind as GHC
+
+data FunctionTypeAnnotation :: GHC.Type -> GHC.Type
+
+instance Functor FunctionTypeAnnotation
+instance Traversable FunctionTypeAnnotation

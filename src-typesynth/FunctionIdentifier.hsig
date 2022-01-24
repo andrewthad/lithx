@@ -1,0 +1,10 @@
+{-# language KindSignatures #-}
+
+signature FunctionIdentifier where
+
+import qualified Data.Kind as GHC
+
+data FunctionIdentifier
+data FunctionIdentifierMap :: GHC.Type -> GHC.Type
+
+lookup :: FunctionIdentifier -> FunctionIdentifierMap a -> Maybe a

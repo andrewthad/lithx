@@ -1,0 +1,12 @@
+{-# language KindSignatures #-}
+
+signature Machine where
+
+import qualified Data.Kind as GHC
+
+data M :: GHC.Type -> GHC.Type
+instance Functor M
+instance Applicative M
+instance Monad M
+
+failure :: String -> M a

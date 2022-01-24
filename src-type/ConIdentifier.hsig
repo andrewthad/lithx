@@ -1,0 +1,9 @@
+signature ConIdentifier where
+
+data ConIdentifier
+
+-- Requiring that ConIdentifier be testable for equality is too
+-- heavy handed. We don't actually always need to be able to compare
+-- types (like during name resolution). However, unconditionally adding
+-- this requirement for helps avoid writing more modules for Type. 
+instance Eq ConIdentifier

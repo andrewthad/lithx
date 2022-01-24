@@ -1,0 +1,243 @@
+cabal-version: 3.0
+name: lithx
+version: 0.1.0.0
+author: Andrew Martin
+maintainer: andrew.thaddeus@gmail.com
+extra-source-files: CHANGELOG.md
+
+library lithimpl
+  exposed-modules:
+    TermTypeAnnotationNone
+    TermTypeAnnotationIdentity
+    FunctionTypeAnnotationIdentity
+    StepIdentity
+    IdentifierShortText
+    FieldIdentifierShortText
+    FieldIdentifierNone
+    ConIdentifierShortText
+    ConIdentifierInt
+    ConIdentifierNone
+    TyVarIdentifierShortText
+    TyVarIdentifierInt
+    IdentifierInt
+    IdentifierNone
+    FieldIdentifierInt
+    MachineStateInt
+    FreshIdentifierMachineStateInt
+    FunctionTypeAnnotationMaybe
+  hs-source-dirs: src-impl
+  ghc-options: -Wall
+  build-depends:
+    , base >=4.14.3.0 && <5
+    , primitive >=0.7.3
+    , text-short
+    , transformers >=0.5.6
+    , containers >=0.6.5.1
+  default-language: Haskell2010
+
+library lithtype
+  ghc-options: -Wall
+  hs-source-dirs: src-type
+  build-depends:
+    , base >=4.14.3.0 && <5
+    , vex
+    , primitive >=0.7.3
+    , text-short
+  exposed-modules:
+    Lith.Type
+  signatures:
+    ConIdentifier
+    TyVarIdentifier
+  default-language: Haskell2010
+
+library lithprim
+  ghc-options: -Wall
+  hs-source-dirs: src-prim
+  build-depends:
+    , base >=4.14.3.0 && <5
+    , vex
+  exposed-modules:
+    Lith.Primitive
+  default-language: Haskell2010
+
+library lithterm
+  build-depends:
+    , base >= 4.11.1 && < 5
+    , text
+    , primitive
+    , containers
+    , natural-arithmetic
+    , vex
+    , text-short
+    , lithprim
+    , lithtype
+  hs-source-dirs: src-term
+  exposed-modules:
+    Lith.Term
+  ghc-options: -Wall
+  signatures:
+    -- Inherits signature FunctionTypeAnnotation (lithprim)
+    -- Inherits signature TyVarIdentifier (lithtype)
+    -- Inherits signature ConIdentifier (lithtype)
+    TermTypeAnnotation
+    Identifier
+    FunctionIdentifier
+    FieldIdentifier
+    FunctionTypeAnnotation
+  default-language: Haskell2010
+
+-- library lithsyntax
+--   ghc-options: -Wall
+--   build-depends:
+--     , base >=4.14.3.0 && <5
+--     , lithterm
+--     , lithimpl
+--   reexported-modules:
+--     , Lith.Syntax
+--   mixins:
+--     lithterm (Lith.Term as Lith.Syntax)
+--       requires
+--       (TermTypeAnnotation as TypeAnnotationNone,
+--        Identifier as IdentifierShortText,
+--        FieldIdentifier as FieldIdentifierShortText,
+--        TyVarIdentifier as TyVarIdentifierShortText,
+--        ConIdentifier as ConIdentifierShortText,
+--        FunctionTypeAnnotation as FunctionTypeAnnotationMaybe),
+--   default-language: Haskell2010
+
+-- Avoids exposing any details about the identifier (an integer) to the
+-- resolution function. The goal is to make it impossible to mix up identifiers
+-- from different contexts (let-bound identifiers, type variables,
+-- data constructors).
+--
+-- Note that this resolution phase only handles local identifiers (let bindings,
+-- scrutinized boxed values, join point labels, join point arguments). Global
+-- identifiers like fields and data constructors are handled in separate passes.
+library lithresolve
+  build-depends:
+    , base >= 4.11.1 && < 5
+    , text
+    , primitive
+    , containers
+    , natural-arithmetic
+    , vex
+    , text-short
+    , lithterm
+    , lithimpl
+  hs-source-dirs: src-resolve
+  exposed-modules:
+    Lith.Resolve
+  reexported-modules:
+    , Lith.Resolve.In
+    , Lith.Resolve.Out
+  ghc-options: -Wall
+  mixins:
+    lithterm (Lith.Term as Lith.Resolve.Out)
+      requires (Identifier as Identifier),
+    lithterm (Lith.Term as Lith.Resolve.In)
+      requires (Identifier as IdentifierNone)
+  signatures:
+    -- Inherits signature Identifer
+    -- Inherits signature ConIdentifier
+    -- Inherits signature TyVarIdentifier
+    -- Inherits signature FieldIdentifier
+    -- Inherits signature FunctionTypeAnnotation
+    -- Inherits signature TermTypeAnnotation
+    FreshIdentifier
+    Machine
+  default-language: Haskell2010
+
+library lithtypeanno
+  build-depends:
+    , base >= 4.11.1 && < 5
+    , lithtype
+  hs-source-dirs: src-typeanno
+  exposed-modules: TermTypeAnnotationType
+  ghc-options: -Wall
+  default-language: Haskell2010
+
+-- Type synthesis, annotating each type with a term. Something
+-- to consider: What is the minimal amount that we really need
+-- to know about Type in order to implement this? We probably
+-- do not actually need to know the specific data constructors.
+library lithtypesynth
+  build-depends:
+    , base >= 4.11.1 && < 5
+    , text
+    , primitive
+    , containers
+    , natural-arithmetic
+    , vex
+    , text-short
+    , lithterm
+    , lithprim
+    , lithtype
+    , lithimpl
+    , lithtypeanno
+  hs-source-dirs: src-typesynth
+  exposed-modules:
+    Lith.Typesynth
+  reexported-modules:
+    , Lith.Typesynth.In
+    , Lith.Typesynth.Out
+  ghc-options: -Wall
+  -- Notably, the input is completely free in TermTypeAnnotation.
+  -- This allows us to run type synthesis to type check something
+  -- that is already annotated with types. Functions and constructors
+  -- must be annotated though. Otherwise, we have to do a little bit
+  -- of type inference
+  mixins:
+    lithtype (Lith.Type),
+    lithprim (Lith.Primitive),
+    lithtypeanno (TermTypeAnnotationType),
+    lithterm (Lith.Term as Lith.Typesynth.Out) requires
+      (TermTypeAnnotation as TermTypeAnnotationType,
+       FunctionTypeAnnotation as FunctionTypeAnnotationIdentity),
+    lithterm (Lith.Term as Lith.Typesynth.In) requires
+      (FunctionTypeAnnotation as FunctionTypeAnnotationIdentity),
+  signatures:
+    -- Inherits signature TyVarIdentifier
+    -- Inherits signature FieldIdentifier
+    -- Inherits signature TermTypeAnnotation
+    -- Enriches Identifier with IdentifierMap, insert, and lookup
+    Identifer 
+    FunctionIdentifier
+    ConIdentifier
+    Machine
+  default-language: Haskell2010
+
+-- Resolve data constructor names to identifiers. This handles
+-- both data constructors in types and data constructors in
+-- terms.
+library lithdatasolve
+  build-depends:
+    , base >= 4.11.1 && < 5
+    , text
+    , primitive
+    , containers
+    , natural-arithmetic
+    , vex
+    , text-short
+    , lithterm
+    , lithimpl
+  hs-source-dirs: src-datasolve
+  exposed-modules:
+    Lith.Datasolve
+  reexported-modules:
+    , Lith.Datasolve.In
+    , Lith.Datasolve.Out
+  ghc-options: -Wall
+  mixins:
+    lithterm (Lith.Term as Lith.Datasolve.Out) requires
+      (ConIdentifier as ConIdentifier),
+    lithterm (Lith.Term as Lith.Datasolve.In) requires
+      (ConIdentifier as ConIdentifierNone)
+  signatures:
+    -- Inherits signature Identifer
+    -- Inherits signature ConIdentifier
+    -- Inherits signature TyVarIdentifier
+    -- Inherits signature FieldIdentifier
+    -- Inherits signature FunctionTypeAnnotation
+    -- Inherits signature TermTypeAnnotation
+    Machine
+  default-language: Haskell2010

@@ -1,0 +1,13 @@
+{-# language KindSignatures #-}
+
+signature FieldIdentifier where
+
+import qualified Data.Kind as GHC
+
+data FieldIdentifier
+
+-- Before name resolution, FieldCollection is Array, and then
+-- after field names are resolved, it becomes IntMap.
+data FieldCollection :: GHC.Type -> GHC.Type
+
+instance Traversable FieldCollection

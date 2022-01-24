@@ -1,0 +1,6 @@
+signature FreshIdentifier where
+
+import Machine (M)
+import Identifier (Identifier)
+
+freshIdentifier :: M Identifier

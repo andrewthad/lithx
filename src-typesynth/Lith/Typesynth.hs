@@ -1,0 +1,263 @@
+{-# language BangPatterns #-}
+{-# language DuplicateRecordFields #-}
+{-# language GADTs #-}
+{-# language ImplicitParams #-}
+{-# language LambdaCase #-}
+{-# language NamedFieldPuns #-}
+
+-- TODO: Still need to handle field projection and data construction.
+-- This requires plumbing all the data type information through this
+-- module.
+module Lith.Typesynth
+  ( typesynthAnnoTerm
+  ) where
+
+import Prelude hiding (id)
+
+
+import Control.Monad (when)
+import Data.Foldable (foldlM,for_)
+import Identifier (IdentifierMap)
+import ConIdentifier (ConIdentifier,ConIdentifierMap)
+import FieldIdentifier (FieldCollection)
+import FunctionIdentifier (FunctionIdentifierMap)
+import Machine (M,failure)
+import Lith.Type (Type)
+import Data.Functor.Identity (Identity(Identity))
+import TyVarIdentifier (TyVarIdentifier)
+import Data.Primitive (Array)
+import Arithmetic.Nat ((=?),(<?))
+
+import qualified Arithmetic.Lt as Lt
+import qualified Arithmetic.Nat as Nat
+import qualified Arithmetic.Types as Arithmetic
+import qualified Lith.Typesynth.Out as Out
+import qualified Lith.Typesynth.In as In
+import qualified Lith.Primitive as Prim
+import qualified Identifier
+import qualified ConIdentifier
+import qualified FunctionIdentifier
+import qualified Lith.Type as Type
+import qualified Vector.Boxed as Boxed
+import qualified FieldIdentifier
+
+-- Probably need to move this out to somewhere with fewer dependencies
+-- so that it can be shared more freely.
+data FunctionDescription = FunctionDescription
+  { tyVars :: !(Array TyVarIdentifier)
+  , argTypes :: !(Array Type)
+  , resultType :: Type
+  }
+
+data ConDescription = ConDescription
+  { tyVars :: !(Array TyVarIdentifier)
+  , argTypes :: !(FieldCollection Type)
+  , parent :: !(Maybe ConIdentifier)
+    -- ^ Track the parent constructor so that we can typecheck
+    -- case-on-box expressions.
+  }
+
+typesynthAnnoTerm ::
+     ( ?funcs :: FunctionIdentifierMap FunctionDescription
+     , ?dcons :: ConIdentifierMap ConDescription
+     )
+  => IdentifierMap Type -> In.AnnoTerm -> M Out.AnnoTerm
+typesynthAnnoTerm ctx In.AnnoTerm{name,term=term0} = case term0 of
+  In.Var v varName -> case Identifier.lookup v ctx of
+    Nothing -> failure "Missing variable"
+    Just ty -> do
+      let term = Out.Var v varName
+      pure Out.AnnoTerm{anno=ty,name,term}
+  In.Literal lit -> do
+    AnnoLit{anno,lit=lit'} <- typesynthLit ctx lit
+    let term = Out.Literal lit'
+    pure Out.AnnoTerm{anno,name,term}
+  In.LetMany bnds expr -> do
+    bnds' <- traverse (typesynthBinding ctx) bnds
+    ctx' <- foldlM
+      (\acc Out.Binding{id,expr=Out.AnnoTerm{anno}} ->
+        case Identifier.lookup id acc of
+          Just _ -> failure "Shadowed binder"
+          Nothing -> pure (Identifier.insert id anno acc)
+      ) ctx bnds'
+    expr'@Out.AnnoTerm{anno=exprAnno} <- typesynthAnnoTerm ctx' expr
+    let term = Out.LetMany bnds' expr'
+    pure (Out.AnnoTerm{anno=exprAnno,name,term})
+  In.Apply funcId (Identity tyArgs) args0 -> do
+    args <- traverse (typesynthAnnoTerm ctx) args0
+    FunctionDescription{tyVars,argTypes,resultType} <- case FunctionIdentifier.lookup funcId ?funcs of
+      Nothing -> failure "Function does not exist"
+      Just descr -> pure descr
+    Boxed.with tyVars $ \tyVars' -> Boxed.with tyArgs $ \tyArgs' -> Boxed.with argTypes $ \argTypes' -> Boxed.with args $ \args' -> do
+      let !tyVarsLen = Boxed.length tyVars'
+      let !tyArgsLen = Boxed.length tyArgs'
+      eqTyVars <- case tyArgsLen =? tyVarsLen of
+        Nothing -> failure "Wrong number of type arguments for function application"
+        Just eq -> pure eq
+      let tyArgs'' = Boxed.substitute eqTyVars tyArgs'
+      expectedTypes <- traverse (substituteType tyVarsLen tyVars' tyArgs'') argTypes'
+      let !expectedTypesLen = Boxed.length expectedTypes
+      let !argsLen = Boxed.length args'
+      eqArgs <- case expectedTypesLen =? argsLen of
+        Nothing -> failure "Wrong number of arguments for function application"
+        Just eq -> pure eq
+      let expectedTypes' = Boxed.substitute eqArgs expectedTypes
+      Boxed.foldlZipWithM_
+        (\Out.AnnoTerm{anno=a} b -> when (a /= b) (failure "Function argument had wrong type")
+        ) argsLen args' expectedTypes'
+      resultType' <- substituteType tyVarsLen tyVars' tyArgs'' resultType
+      let term = Out.Apply funcId (Identity tyArgs) args
+      pure (Out.AnnoTerm{anno=resultType',name,term})
+  In.CaseBool scrutinee onTrue onFalse -> do
+    scrutinee'@Out.AnnoTerm{anno=scrutTy} <- typesynthAnnoTerm ctx scrutinee
+    case scrutTy of
+      Type.Bool -> pure ()
+      _ -> failure "Cannot perform case-bool on non boolean type"
+    onTrue'@Out.AnnoTerm{anno=onTrueTy} <- typesynthAnnoTerm ctx onTrue
+    onFalse'@Out.AnnoTerm{anno=onFalseTy} <- typesynthAnnoTerm ctx onFalse
+    when (onTrueTy /= onFalseTy)
+      (failure "Arms of case-bool did not have same type")
+    let term = Out.CaseBool scrutinee' onTrue' onFalse'
+    pure Out.AnnoTerm{anno=onTrueTy,name,term}
+  In.ApplyPrimitive typeArity termArity op (Identity typeArgs) args -> do
+    args' <- traverse (typesynthAnnoTerm ctx) args
+    outTy <- case op of
+      Prim.Add
+        | Out.AnnoTerm{anno=a} <- Boxed.index Lt.constant args' Nat.zero
+        , Out.AnnoTerm{anno=b} <- Boxed.index Lt.constant args' Nat.one
+          -> do
+            case a of
+              Type.Int -> pure ()
+              _ -> failure "Expected first argument of add to be Int"
+            case b of
+              Type.Int -> pure ()
+              _ -> failure "Expected second argument of add to be Int"
+            pure Type.Int
+      Prim.Negate
+        | Out.AnnoTerm{anno=a} <- Boxed.index Lt.constant args' Nat.zero
+          -> do
+            case a of
+              Type.Int -> pure ()
+              _ -> failure "Expected first argument of add to be Int"
+            pure Type.Int
+      Prim.ArrayIndex
+        | elemTy <- Boxed.index Lt.constant typeArgs Nat.zero
+        , Out.AnnoTerm{anno=arrTy} <- Boxed.index Lt.constant args' Nat.zero
+        , Out.AnnoTerm{anno=ixTy} <- Boxed.index Lt.constant args' Nat.one
+          -> do
+            case arrTy of
+              Type.Array arrElemTy -> when (elemTy /= arrElemTy)
+                (failure "First argument to arrayIndex was array of wrong type") 
+              _ -> failure "First argument to arrayIndex was not array"
+            case ixTy of
+              Type.Int -> pure ()
+              _ -> failure "Expected second argument of arrayIndex to be Int"
+            pure elemTy
+    let term = Out.ApplyPrimitive typeArity termArity op (Identity typeArgs) args'
+    pure Out.AnnoTerm{anno=outTy,name,term}
+  -- In.Project expr field -> do
+  --   expr' <- typesynthAnnoTerm ctx expr
+  --   pure (Out.Project expr' field)
+
+-- The id is not present on syntax terms.
+typesynthBinding ::
+     ( ?funcs :: FunctionIdentifierMap FunctionDescription
+     , ?dcons :: ConIdentifierMap ConDescription
+     )
+  => IdentifierMap Type -> In.Binding -> M Out.Binding
+typesynthBinding ctx In.Binding{id,name,expr} = do
+  expr' <- typesynthAnnoTerm ctx expr
+  pure Out.Binding{id,name,expr=expr'}
+
+substituteType ::
+     Arithmetic.Nat n
+  -> Boxed.Vector n TyVarIdentifier -- variable names
+  -> Boxed.Vector n Type -- substitution of each variable
+  -> Type -- type in which substitution is performed
+  -> M Type
+substituteType !n vars args ty0 = case ty0 of
+  Type.Int -> pure Type.Int
+  Type.Bits -> pure Type.Bits
+  Type.Bool -> pure Type.Bool
+  Type.Array ty -> do
+    ty' <- substituteType n vars args ty
+    pure (Type.Array ty')
+  Type.TyVar var -> do
+    sub <- findSubstitution n var vars args
+    pure sub
+
+findSubstitution ::
+     Arithmetic.Nat n
+  -> TyVarIdentifier
+  -> Boxed.Vector n TyVarIdentifier
+  -> Boxed.Vector n Type
+  -> M Type
+findSubstitution !n !var vars args = go Nat.zero
+  where
+  go :: Arithmetic.Nat m -> M Type
+  go !m = case m <? n of
+    Nothing -> failure "Type variable not found in substitutions"
+    Just lt -> do
+      let ident = Boxed.index lt vars m
+      if ident == var
+        then pure (Boxed.index lt args m)
+        else go (Nat.succ m)
+
+-- Used internally as result of typesynthLit.
+data AnnoLit = AnnoLit
+  { anno :: Type
+  , lit :: Out.Lit
+  }
+
+typesynthLit ::
+     ( ?funcs :: FunctionIdentifierMap FunctionDescription
+     , ?dcons :: ConIdentifierMap ConDescription
+     )
+  => IdentifierMap Type -> In.Lit -> M AnnoLit
+typesynthLit ctx = \case
+  In.LitInt i -> pure (AnnoLit Type.Int (Out.LitInt i))
+  In.LitBits w -> pure (AnnoLit Type.Bits (Out.LitBits w))
+  In.LitTrue -> pure (AnnoLit Type.Bool Out.LitTrue)
+  In.LitFalse -> pure (AnnoLit Type.Bool Out.LitFalse)
+  In.LitArray (Identity ty) xs -> do
+    xs' <- traverse (typesynthAnnoTerm ctx) xs
+    for_ xs' $ \Out.AnnoTerm{anno} ->
+      when (anno /= ty) (failure "Array element had wrong type")
+    pure (AnnoLit (Type.Array ty) (Out.LitArray (Identity ty) xs'))
+  In.LitCon con conName (Identity tyArgs) args0 -> do
+    -- Similar to function application, but the arguments are in
+    -- a map with keys rather than an array. That is, is in by name
+    -- instead of by position.
+    args <- traverse (typesynthConstructionField ctx) args0
+    ConDescription{tyVars,argTypes} <- case ConIdentifier.lookup con ?dcons of
+      Nothing -> failure "Data constructor does not exist"
+      Just descr -> pure descr
+    Boxed.with tyVars $ \tyVars' -> Boxed.with tyArgs $ \tyArgs' -> do
+      let !tyVarsLen = Boxed.length tyVars'
+      let !tyArgsLen = Boxed.length tyArgs'
+      eqTyVars <- case tyArgsLen =? tyVarsLen of
+        Nothing -> failure "Wrong number of type arguments for data constructor"
+        Just eq -> pure eq
+      let tyArgs'' = Boxed.substitute eqTyVars tyArgs'
+      expectedTypes <- traverse (substituteType tyVarsLen tyVars' tyArgs'') argTypes
+      when (not (FieldIdentifier.sameKeys args expectedTypes))
+        (failure "Data constructor had unexpected keys or was missing keys")
+      -- TODO: verify that all field are present and no extras
+      -- are there.
+      FieldIdentifier.zipM_
+        (\Out.ConstructionField{expr=Out.AnnoTerm{anno=a}} b -> when (a /= b)
+          (failure "Data constructor argument had wrong type")
+        ) args expectedTypes
+    let lit = Out.LitCon con conName (Identity tyArgs) args
+    pure AnnoLit{anno=Type.Box con conName tyArgs,lit}
+
+typesynthConstructionField ::
+     ( ?funcs :: FunctionIdentifierMap FunctionDescription
+     , ?dcons :: ConIdentifierMap ConDescription
+     )
+  => IdentifierMap Type
+  -> In.ConstructionField
+  -> M Out.ConstructionField
+typesynthConstructionField ctx In.ConstructionField{name,expr} = do
+  expr' <- typesynthAnnoTerm ctx expr
+  pure Out.ConstructionField{name,expr=expr'}
