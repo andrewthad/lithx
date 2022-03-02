@@ -1,0 +1,6 @@
+signature TermAnnotationShow where
+
+import TermAnnotation (TermAnnotation)
+import Data.Text.Short (ShortText)
+
+showAsSuffix :: TermAnnotation -> ShortText

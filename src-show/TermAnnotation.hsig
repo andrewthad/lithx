@@ -1,0 +1,3 @@
+signature TermAnnotation where
+
+data TermAnnotation

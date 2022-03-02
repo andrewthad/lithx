@@ -1,0 +1,5 @@
+define example (Int, Int) -> Int
+as (a,b) :
+  x = $add(a,b)
+  y = $multiply(a,b)
+  $add(x,y)

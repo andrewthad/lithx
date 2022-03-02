@@ -11,6 +11,7 @@ data FieldCollection :: GHC.Type -> GHC.Type
 
 instance Traversable FieldCollection
 
+-- Monadic fold over the intersection of the collections
 zipM_ :: Monad m
   => (a -> b -> m c)
   -> FieldCollection a
@@ -18,3 +19,5 @@ zipM_ :: Monad m
   -> m ()
 
 sameKeys :: FieldCollection a -> FieldCollection b -> Bool
+
+lookup :: FieldIdentifier -> FieldCollection a -> Maybe a

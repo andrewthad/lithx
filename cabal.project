@@ -1,1 +1,1 @@
-packages: . ../vex
+packages: . ../vex ../eexprs/hs/eexpr-bindings ../eexprs/hs/eexpr-core

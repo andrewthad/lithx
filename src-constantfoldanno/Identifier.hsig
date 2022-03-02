@@ -1,0 +1,4 @@
+signature Identifier where
+
+data Identifier
+instance Eq Identifier

@@ -1,0 +1,5 @@
+signature FieldIdentifier where
+
+data FieldIdentifier
+instance Eq FieldIdentifier
+

@@ -1,0 +1,4 @@
+signature ConIdentifier where
+
+data ConIdentifier
+instance Eq ConIdentifier

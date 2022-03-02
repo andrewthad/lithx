@@ -1,0 +1,14 @@
+{-# language KindSignatures #-}
+
+signature Identifier where
+
+data Identifier
+instance Eq Identifier
+
+data IdentifierSet
+instance Semigroup IdentifierSet
+instance Monoid IdentifierSet
+
+union :: IdentifierSet -> IdentifierSet -> IdentifierSet
+member :: Identifier -> IdentifierSet -> Bool
+singleton :: Identifier -> IdentifierSet

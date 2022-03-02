@@ -22,3 +22,15 @@ care about the values of integer and bits literals, so we could make
 literals more opaque to the typechecker.
 Similarly, certain optimization passes do not need to inspect types, so
 we could make them agnostic to type annotations on terms.
+
+# Positional Arguments and Named Arguments
+
+All typed arguments are always handled positionally. Function arguments
+are also handled positionally. Data constructor fields are always named,
+unlike in Haskell, and values can only be constructed by using the names.
+
+# Tuples
+
+Currently, there is no way to return an anonymous tuple from a function.
+Anonymous tuples do not really exist in this language. Supporting them
+is possible, but it's tedious, and they do not add expressive power.

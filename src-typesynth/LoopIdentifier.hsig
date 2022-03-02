@@ -1,0 +1,13 @@
+{-# language KindSignatures #-}
+
+signature LoopIdentifier where
+
+import qualified Data.Kind as GHC
+
+data LoopIdentifier
+data LoopIdentifierMap :: GHC.Type -> GHC.Type
+
+insert :: LoopIdentifier -> a -> LoopIdentifierMap a -> LoopIdentifierMap a
+lookup :: LoopIdentifier -> LoopIdentifierMap a -> Maybe a
+empty :: LoopIdentifierMap a
+

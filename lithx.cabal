@@ -1,12 +1,32 @@
-cabal-version: 3.0
+cabal-version: 3.4
 name: lithx
 version: 0.1.0.0
 author: Andrew Martin
 maintainer: andrew.thaddeus@gmail.com
 extra-source-files: CHANGELOG.md
 
+common lithcommon
+  ghc-options: -Wall
+  default-language: Haskell2010
+  build-depends:
+    , base >=4.14.3.0 && <5
+    , bytestring >=0.10
+    , containers >=0.6.5.1
+    , contiguous
+    , eexpr-bindings
+    , eexpr-core
+    , natural-arithmetic
+    , primitive >=0.7.3
+    , text
+    , text-short
+    , transformers >=0.5.6
+    , vex
+
 library lithimpl
+  import: lithcommon
   exposed-modules:
+    TermAnnotationIntSet
+    TermAnnotationNone
     TermTypeAnnotationNone
     TermTypeAnnotationIdentity
     FunctionTypeAnnotationIdentity
@@ -14,6 +34,8 @@ library lithimpl
     IdentifierShortText
     FieldIdentifierShortText
     FieldIdentifierNone
+    FunctionIdentifierShortText
+    FunctionIdentifierNone
     ConIdentifierShortText
     ConIdentifierInt
     ConIdentifierNone
@@ -21,89 +43,119 @@ library lithimpl
     TyVarIdentifierInt
     IdentifierInt
     IdentifierNone
+    LoopIdentifierInt
+    LoopIdentifierNone
     FieldIdentifierInt
+    MachineEither
     MachineStateInt
     FreshIdentifierMachineStateInt
     FunctionTypeAnnotationMaybe
+    Order
   hs-source-dirs: src-impl
-  ghc-options: -Wall
-  build-depends:
-    , base >=4.14.3.0 && <5
-    , primitive >=0.7.3
-    , text-short
-    , transformers >=0.5.6
-    , containers >=0.6.5.1
-  default-language: Haskell2010
 
 library lithtype
-  ghc-options: -Wall
+  import: lithcommon
   hs-source-dirs: src-type
-  build-depends:
-    , base >=4.14.3.0 && <5
-    , vex
-    , primitive >=0.7.3
-    , text-short
+  build-depends: lithx:lithimpl
   exposed-modules:
     Lith.Type
   signatures:
     ConIdentifier
     TyVarIdentifier
-  default-language: Haskell2010
+
+library lithident
+  import: lithcommon
+  hs-source-dirs: src-ident
+  exposed-modules:
+    Lith.NamedIdentifier
+  signatures:
+    Identifier
 
 library lithprim
-  ghc-options: -Wall
+  import: lithcommon
   hs-source-dirs: src-prim
-  build-depends:
-    , base >=4.14.3.0 && <5
-    , vex
   exposed-modules:
     Lith.Primitive
-  default-language: Haskell2010
 
 library lithterm
+  import: lithcommon
   build-depends:
-    , base >= 4.11.1 && < 5
-    , text
-    , primitive
-    , containers
-    , natural-arithmetic
-    , vex
-    , text-short
-    , lithprim
-    , lithtype
+    , lithx:lithprim
+    , lithx:lithtype
+    , lithx:lithident
+    , lithx:lithimpl
   hs-source-dirs: src-term
   exposed-modules:
     Lith.Term
-  ghc-options: -Wall
   signatures:
-    -- Inherits signature FunctionTypeAnnotation (lithprim)
-    -- Inherits signature TyVarIdentifier (lithtype)
     -- Inherits signature ConIdentifier (lithtype)
-    TermTypeAnnotation
-    Identifier
-    FunctionIdentifier
+    -- Inherits signature TyVarIdentifier (lithtype)
     FieldIdentifier
+    FunctionIdentifier
     FunctionTypeAnnotation
-  default-language: Haskell2010
+    Identifier
+    LoopIdentifier
+    TermAnnotation
+    TermTypeAnnotation
 
--- library lithsyntax
---   ghc-options: -Wall
---   build-depends:
---     , base >=4.14.3.0 && <5
---     , lithterm
---     , lithimpl
---   reexported-modules:
---     , Lith.Syntax
---   mixins:
---     lithterm (Lith.Term as Lith.Syntax)
---       requires
---       (TermTypeAnnotation as TypeAnnotationNone,
---        Identifier as IdentifierShortText,
---        FieldIdentifier as FieldIdentifierShortText,
---        TyVarIdentifier as TyVarIdentifierShortText,
---        ConIdentifier as ConIdentifierShortText,
---        FunctionTypeAnnotation as FunctionTypeAnnotationMaybe),
---   default-language: Haskell2010
+library litheq
+  import: lithcommon
+  build-depends:
+    , lithx:lithprim
+    , lithx:lithtype
+    , lithx:lithterm
+  hs-source-dirs: src-eq
+  exposed-modules:
+    Lith.Term.Eq
+  signatures:
+    ConIdentifier
+    Identifier
+    LoopIdentifier
+    FieldIdentifier
+
+library lithshow
+  import: lithcommon
+  build-depends:
+    , lithx:lithprim
+    , lithx:lithtype
+    , lithx:lithterm
+  hs-source-dirs: src-show
+  exposed-modules:
+    Lith.Show
+  signatures:
+    Identifier
+    TermAnnotation
+    TermAnnotationShow
+  --   ConIdentifier
+  --   TyVarIdentifier
+  --   FieldIdentifier
+  --   FunctionIdentifier
+  --   FunctionTypeAnnotation
+  --   TermTypeAnnotation
+
+library lithsyntax
+  import: lithcommon
+  hs-source-dirs: src-syntax
+  build-depends:
+    , lithx:lithterm
+    , lithx:lithimpl
+    , lithx:lithprim
+  exposed-modules:
+    Lith.Parse
+  reexported-modules:
+    , Lith.Syntax.Out
+  mixins:
+    lithx:lithterm (Lith.Term as Lith.Syntax.Out)
+      requires
+      (TermTypeAnnotation as TermTypeAnnotationNone,
+       TermAnnotation as TermAnnotationNone,
+       Identifier as IdentifierNone,
+       LoopIdentifier as LoopIdentifierNone,
+       FieldIdentifier as FieldIdentifierNone,
+       FunctionIdentifier as FunctionIdentifierNone,
+       TyVarIdentifier as TyVarIdentifierShortText,
+       ConIdentifier as ConIdentifierNone,
+       FunctionTypeAnnotation as FunctionTypeAnnotationIdentity)
 
 -- Avoids exposing any details about the identifier (an integer) to the
 -- resolution function. The goal is to make it impossible to mix up identifiers
@@ -114,30 +166,24 @@ library lithterm
 -- scrutinized boxed values, join point labels, join point arguments). Global
 -- identifiers like fields and data constructors are handled in separate passes.
 library lithresolve
+  import: lithcommon
   build-depends:
-    , base >= 4.11.1 && < 5
-    , text
-    , primitive
-    , containers
-    , natural-arithmetic
-    , vex
-    , text-short
-    , lithterm
-    , lithimpl
+    , lithx:lithterm
+    , lithx:lithimpl
   hs-source-dirs: src-resolve
   exposed-modules:
     Lith.Resolve
   reexported-modules:
     , Lith.Resolve.In
     , Lith.Resolve.Out
-  ghc-options: -Wall
   mixins:
-    lithterm (Lith.Term as Lith.Resolve.Out)
-      requires (Identifier as Identifier),
-    lithterm (Lith.Term as Lith.Resolve.In)
-      requires (Identifier as IdentifierNone)
+    lithx:lithterm (Lith.Term as Lith.Resolve.Out)
+      requires (Identifier as Identifier, LoopIdentifier as LoopIdentifier),
+    lithx:lithterm (Lith.Term as Lith.Resolve.In)
+      requires (Identifier as IdentifierNone, LoopIdentifier as LoopIdentifierNone)
   signatures:
-    -- Inherits signature Identifer
+    -- Inherits signature Identifier
+    -- Inherits signature LoopIdentifier
     -- Inherits signature ConIdentifier
     -- Inherits signature TyVarIdentifier
     -- Inherits signature FieldIdentifier
@@ -145,99 +191,342 @@ library lithresolve
     -- Inherits signature TermTypeAnnotation
     FreshIdentifier
     Machine
-  default-language: Haskell2010
 
 library lithtypeanno
+  import: lithcommon
   build-depends:
-    , base >= 4.11.1 && < 5
-    , lithtype
+    , lithx:lithtype
   hs-source-dirs: src-typeanno
   exposed-modules: TermTypeAnnotationType
-  ghc-options: -Wall
-  default-language: Haskell2010
 
 -- Type synthesis, annotating each type with a term. Something
 -- to consider: What is the minimal amount that we really need
 -- to know about Type in order to implement this? We probably
 -- do not actually need to know the specific data constructors.
 library lithtypesynth
+  import: lithcommon
   build-depends:
-    , base >= 4.11.1 && < 5
-    , text
-    , primitive
-    , containers
-    , natural-arithmetic
-    , vex
-    , text-short
-    , lithterm
-    , lithprim
-    , lithtype
-    , lithimpl
-    , lithtypeanno
+    , lithx:lithterm
+    , lithx:lithprim
+    , lithx:lithtype
+    , lithx:lithimpl
+    , lithx:lithtypeanno
   hs-source-dirs: src-typesynth
   exposed-modules:
     Lith.Typesynth
   reexported-modules:
     , Lith.Typesynth.In
     , Lith.Typesynth.Out
-  ghc-options: -Wall
   -- Notably, the input is completely free in TermTypeAnnotation.
   -- This allows us to run type synthesis to type check something
   -- that is already annotated with types. Functions and constructors
   -- must be annotated though. Otherwise, we have to do a little bit
   -- of type inference
   mixins:
-    lithtype (Lith.Type),
-    lithprim (Lith.Primitive),
-    lithtypeanno (TermTypeAnnotationType),
-    lithterm (Lith.Term as Lith.Typesynth.Out) requires
+    lithx:lithtype (Lith.Type),
+    lithx:lithprim (Lith.Primitive),
+    lithx:lithtypeanno (TermTypeAnnotationType),
+    lithx:lithterm (Lith.Term as Lith.Typesynth.Out) requires
       (TermTypeAnnotation as TermTypeAnnotationType,
        FunctionTypeAnnotation as FunctionTypeAnnotationIdentity),
-    lithterm (Lith.Term as Lith.Typesynth.In) requires
+    lithx:lithterm (Lith.Term as Lith.Typesynth.In) requires
       (FunctionTypeAnnotation as FunctionTypeAnnotationIdentity),
   signatures:
     -- Inherits signature TyVarIdentifier
     -- Inherits signature FieldIdentifier
     -- Inherits signature TermTypeAnnotation
     -- Enriches Identifier with IdentifierMap, insert, and lookup
-    Identifer 
+    Identifier 
+    LoopIdentifier 
     FunctionIdentifier
     ConIdentifier
     Machine
-  default-language: Haskell2010
 
 -- Resolve data constructor names to identifiers. This handles
 -- both data constructors in types and data constructors in
 -- terms.
 library lithdatasolve
+  import: lithcommon
   build-depends:
-    , base >= 4.11.1 && < 5
-    , text
-    , primitive
-    , containers
-    , natural-arithmetic
-    , vex
-    , text-short
-    , lithterm
-    , lithimpl
+    , lithx:lithterm
+    , lithx:lithimpl
   hs-source-dirs: src-datasolve
   exposed-modules:
     Lith.Datasolve
   reexported-modules:
     , Lith.Datasolve.In
     , Lith.Datasolve.Out
-  ghc-options: -Wall
   mixins:
-    lithterm (Lith.Term as Lith.Datasolve.Out) requires
+    lithx:lithterm (Lith.Term as Lith.Datasolve.Out) requires
       (ConIdentifier as ConIdentifier),
-    lithterm (Lith.Term as Lith.Datasolve.In) requires
+    lithx:lithterm (Lith.Term as Lith.Datasolve.In) requires
       (ConIdentifier as ConIdentifierNone)
   signatures:
-    -- Inherits signature Identifer
+    -- Inherits signature Identifier
     -- Inherits signature ConIdentifier
     -- Inherits signature TyVarIdentifier
     -- Inherits signature FieldIdentifier
     -- Inherits signature FunctionTypeAnnotation
     -- Inherits signature TermTypeAnnotation
     Machine
+
+library lithconstantfoldanno
+  import: lithcommon
+  build-depends:
+    , base >= 4.11.1 && < 5
+  hs-source-dirs: src-constantfoldanno
+  exposed-modules:
+    TermAnnotationShape
+    Shape
+  signatures: Identifier
+  ghc-options: -Wall
   default-language: Haskell2010
+
+library lithconstantfoldannoshow
+  import: lithcommon
+  build-depends:
+    , base >= 4.11.1 && < 5
+    , lithx:lithconstantfoldanno
+  hs-source-dirs: src-constantfoldannoshow
+  exposed-modules: TermAnnotationShapeShow
+  signatures: Identifier
+  ghc-options: -Wall
+  default-language: Haskell2010
+
+
+library lithdemandanno
+  import: lithcommon
+  build-depends:
+    , base >= 4.11.1 && < 5
+  hs-source-dirs: src-demandanno
+  exposed-modules: TermAnnotationDemand
+  signatures: Identifier
+  ghc-options: -Wall
+  default-language: Haskell2010
+
+-- library lithdemandannoshow
+--   import: lithcommon
+--   build-depends:
+--     , base >= 4.11.1 && < 5
+--   hs-source-dirs: src-demandannoshow
+--   exposed-modules: TermAnnotationDemandShow
+--   signatures: Identifier
+--   ghc-options: -Wall
+--   default-language: Haskell2010
+
+-- Analyze where let-bound expressions are used and move them
+-- closer to the use site. Eliminate them if there is no use
+-- site.
+-- Optimization requires us to throw out the results of the analysis
+-- since it invalidates the results. In particular, pushing a binding
+-- inside a case arm invalidates the annotation on the case statement.
+-- TODO: Make DCE and analysis happen at the same time.
+library lithdemand
+  import: lithcommon
+  build-depends:
+    , lithx:lithterm
+    , lithx:lithimpl
+    , lithx:lithdemandanno
+  hs-source-dirs: src-demand
+  exposed-modules:
+    Lith.Demand.Compute
+    Lith.Demand.DeadCodeElimination
+    Lith.Demand.FloatIn
+  reexported-modules:
+    , Lith.Demand.Optimized
+    , Lith.Demand.Analyzed
+    , Lith.Demand.Unanalyzed
+    , TermAnnotationDemandInst
+  mixins:
+    lithx:lithdemandanno (TermAnnotationDemand as TermAnnotationDemandInst),
+    lithx:lithterm (Lith.Term as Lith.Demand.Optimized) requires
+      (TermAnnotation as TermAnnotationNone),
+    lithx:lithterm (Lith.Term as Lith.Demand.Analyzed) requires
+      (TermAnnotation as TermAnnotationDemandInst),
+    lithx:lithterm (Lith.Term as Lith.Demand.Unanalyzed)
+  signatures:
+    Identifier
+
+-- Note that the result of perform constant folding on a decorated term
+-- is another decorated term. That is, constant folding does not invalidate
+-- the annotation. (This contrasts with floating in let bindings.)
+-- However, even though the annotations are still valid, they are not
+-- necessarily as strong as they could be. For example, a multiply-by-zero
+-- will be optimized to zero, but the annotation will not indicate that
+-- this number is zero. The decoration must be redone to identify this
+-- new information.
+-- I believe that comment is out of date. It is better to just drop the
+-- annotation.
+library lithconstantfold
+  import: lithcommon
+  build-depends:
+    , lithx:lithterm
+    , lithx:lithimpl
+    , lithx:lithprim
+    , lithx:lithconstantfoldanno
+  hs-source-dirs: src-constantfold
+  exposed-modules:
+    Lith.ConstantFold.Decorate
+    Lith.ConstantFold.Run
+  reexported-modules:
+    TermAnnotationShapeInst
+  mixins:
+    lithx:lithconstantfoldanno (TermAnnotationShape as TermAnnotationShapeInst, Shape),
+    lithx:lithterm (Lith.Term as Lith.ConstantFold.Optimized) requires
+      (TermAnnotation as TermAnnotationNone),
+    lithx:lithterm (Lith.Term as Lith.ConstantFold.Decorated) requires
+      (TermAnnotation as TermAnnotationShapeInst),
+    lithx:lithterm (Lith.Term as Lith.ConstantFold.Unanalyzed)
+  signatures:
+    Identifier
+
+executable lith
+  import: lithcommon
+  hs-source-dirs: app
+  main-is: Main.hs
+  build-depends:
+    , lithx:lithsyntax
+    , lithx:lithshow
+    , lithx:lithresolve
+    , lithx:lithimpl
+    , lithx:lithdatasolve
+    , lithx:lithtypesynth
+    , lithx:lithdemand
+    , lithx:lithconstantfold
+    , lithx:lithconstantfoldannoshow
+    , lithx:litheq
+    , eexpr-core
+    , eexpr-bindings
+  mixins:
+    lithx:lithconstantfoldannoshow (TermAnnotationShapeShow as TermAnnotationShapeShowInst)
+      requires
+      (Identifier as IdentifierInt),
+    lithx:lithshow (Lith.Show as Lith.Syntax.Show)
+      requires
+      (TermTypeAnnotation as TermTypeAnnotationNone,
+       TermAnnotation as TermAnnotationNone,
+       TermAnnotationShow as TermAnnotationNone,
+       Identifier as IdentifierNone,
+       LoopIdentifier as LoopIdentifierNone,
+       FieldIdentifier as FieldIdentifierNone,
+       FunctionIdentifier as FunctionIdentifierNone,
+       TyVarIdentifier as TyVarIdentifierShortText,
+       ConIdentifier as ConIdentifierNone,
+       FunctionTypeAnnotation as FunctionTypeAnnotationIdentity),
+    lithx:lithshow (Lith.Show as Lith.Resolved.Show)
+      requires
+      (TermTypeAnnotation as TermTypeAnnotationNone,
+       TermAnnotation as TermAnnotationNone,
+       TermAnnotationShow as TermAnnotationNone,
+       Identifier as IdentifierInt,
+       LoopIdentifier as LoopIdentifierInt,
+       FieldIdentifier as FieldIdentifierNone,
+       FunctionIdentifier as FunctionIdentifierNone,
+       TyVarIdentifier as TyVarIdentifierShortText,
+       ConIdentifier as ConIdentifierNone,
+       FunctionTypeAnnotation as FunctionTypeAnnotationIdentity),
+    lithx:litheq (Lith.Term.Eq)
+      requires
+      (TermTypeAnnotation as TermTypeAnnotationNone,
+       TermAnnotation as TermAnnotationNone,
+       Identifier as IdentifierInt,
+       LoopIdentifier as LoopIdentifierInt,
+       FieldIdentifier as FieldIdentifierNone,
+       FunctionIdentifier as FunctionIdentifierNone,
+       TyVarIdentifier as TyVarIdentifierShortText,
+       ConIdentifier as ConIdentifierInt,
+       FunctionTypeAnnotation as FunctionTypeAnnotationIdentity),
+    lithx:lithshow (Lith.Show as Lith.Datasolved.Show)
+      requires
+      (TermTypeAnnotation as TermTypeAnnotationNone,
+       TermAnnotation as TermAnnotationNone,
+       TermAnnotationShow as TermAnnotationNone,
+       Identifier as IdentifierInt,
+       LoopIdentifier as LoopIdentifierInt,
+       FieldIdentifier as FieldIdentifierNone,
+       FunctionIdentifier as FunctionIdentifierNone,
+       TyVarIdentifier as TyVarIdentifierShortText,
+       ConIdentifier as ConIdentifierInt,
+       FunctionTypeAnnotation as FunctionTypeAnnotationIdentity),
+    lithx:lithdemand (Lith.Demand.Analyzed, Lith.Demand.Compute, Lith.Demand.FloatIn, TermAnnotationDemandInst)
+      requires
+      (TermTypeAnnotation as TermTypeAnnotationNone,
+       TermAnnotation as TermAnnotationNone,
+       FieldIdentifier as FieldIdentifierNone,
+       FunctionIdentifier as FunctionIdentifierNone,
+       TyVarIdentifier as TyVarIdentifierShortText,
+       Identifier as IdentifierInt,
+       LoopIdentifier as LoopIdentifierInt,
+       ConIdentifier as ConIdentifierInt,
+       FunctionTypeAnnotation as FunctionTypeAnnotationIdentity),
+    lithx:lithshow (Lith.Show as Lith.Demand.Analyzed.Show)
+      requires
+      (TermTypeAnnotation as TermTypeAnnotationNone,
+       TermAnnotation as TermAnnotationDemandInst,
+       TermAnnotationShow as TermAnnotationIntSet,
+       Identifier as IdentifierInt,
+       LoopIdentifier as LoopIdentifierInt,
+       FieldIdentifier as FieldIdentifierNone,
+       FunctionIdentifier as FunctionIdentifierNone,
+       TyVarIdentifier as TyVarIdentifierShortText,
+       ConIdentifier as ConIdentifierInt,
+       FunctionTypeAnnotation as FunctionTypeAnnotationIdentity),
+    lithx:lithresolve (Lith.Resolve as Lith.Resolve, Lith.Resolve.Out as Lith.Resolved)
+      requires
+      (TermTypeAnnotation as TermTypeAnnotationNone,
+       TermAnnotation as TermAnnotationNone,
+       FieldIdentifier as FieldIdentifierNone,
+       FunctionIdentifier as FunctionIdentifierNone,
+       TyVarIdentifier as TyVarIdentifierShortText,
+       ConIdentifier as ConIdentifierNone,
+       Identifier as IdentifierInt,
+       LoopIdentifier as LoopIdentifierInt,
+       Machine as MachineStateInt,
+       FreshIdentifier as FreshIdentifierMachineStateInt,
+       FunctionTypeAnnotation as FunctionTypeAnnotationIdentity),
+    lithx:lithdatasolve (Lith.Datasolve as Lith.Datasolve, Lith.Datasolve.Out as Lith.Datasolved)
+      requires
+      (TermTypeAnnotation as TermTypeAnnotationNone,
+       TermAnnotation as TermAnnotationNone,
+       FieldIdentifier as FieldIdentifierNone,
+       FunctionIdentifier as FunctionIdentifierNone,
+       TyVarIdentifier as TyVarIdentifierShortText,
+       Identifier as IdentifierInt,
+       LoopIdentifier as LoopIdentifierInt,
+       ConIdentifier as ConIdentifierInt,
+       Machine as MachineEither,
+       FunctionTypeAnnotation as FunctionTypeAnnotationIdentity),
+    lithx:lithtypesynth (Lith.Typesynth as Lith.Typesynth, Lith.Typesynth.Out as Lith.Typed)
+      requires
+      (TermTypeAnnotation as TermTypeAnnotationNone,
+       TermAnnotation as TermAnnotationNone,
+       FieldIdentifier as FieldIdentifierNone,
+       FunctionIdentifier as FunctionIdentifierNone,
+       TyVarIdentifier as TyVarIdentifierShortText,
+       Machine as MachineEither,
+       ConIdentifier as ConIdentifierInt,
+       LoopIdentifier as LoopIdentifierInt,
+       Identifier as IdentifierInt),
+    lithx:lithconstantfold (Lith.ConstantFold.Decorate, Lith.ConstantFold.Run, TermAnnotationShapeInst)
+      requires
+      (TermTypeAnnotation as TermTypeAnnotationNone,
+       TermAnnotation as TermAnnotationNone,
+       FieldIdentifier as FieldIdentifierNone,
+       FunctionIdentifier as FunctionIdentifierNone,
+       TyVarIdentifier as TyVarIdentifierShortText,
+       Identifier as IdentifierInt,
+       LoopIdentifier as LoopIdentifierInt,
+       ConIdentifier as ConIdentifierInt,
+       FunctionTypeAnnotation as FunctionTypeAnnotationIdentity),
+    lithx:lithshow (Lith.Show as Lith.ConstantFold.Show)
+      requires
+      (TermTypeAnnotation as TermTypeAnnotationNone,
+       TermAnnotation as TermAnnotationShapeInst,
+       TermAnnotationShow as TermAnnotationShapeShowInst,
+       Identifier as IdentifierInt,
+       LoopIdentifier as LoopIdentifierInt,
+       FieldIdentifier as FieldIdentifierNone,
+       FunctionIdentifier as FunctionIdentifierNone,
+       TyVarIdentifier as TyVarIdentifierShortText,
+       ConIdentifier as ConIdentifierInt,
+       FunctionTypeAnnotation as FunctionTypeAnnotationIdentity),

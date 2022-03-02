@@ -1,0 +1,7 @@
+define example (Bool,Int) -> Int
+as (b,r) :
+  case {Bool} on b of:
+    True => 55
+    False =>:
+      a = $add(r,1)
+      a

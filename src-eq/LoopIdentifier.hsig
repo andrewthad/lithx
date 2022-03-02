@@ -1,0 +1,4 @@
+signature LoopIdentifier where
+
+data LoopIdentifier
+instance Eq LoopIdentifier

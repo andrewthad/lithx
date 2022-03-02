@@ -1,0 +1,7 @@
+define example (Array Int) -> Int
+as (xs) :
+  for(10)(asc xs)(5)()():
+    body(ix)(x)(acc) => :
+      y = $add(acc,$multiply(x,2))
+      continue(y)()()
+    epilogue(acc)()() => acc

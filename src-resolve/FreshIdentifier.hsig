@@ -2,5 +2,7 @@ signature FreshIdentifier where
 
 import Machine (M)
 import Identifier (Identifier)
+import LoopIdentifier (LoopIdentifier)
 
 freshIdentifier :: M Identifier
+freshLoopIdentifier :: M LoopIdentifier

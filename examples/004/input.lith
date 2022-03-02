@@ -1,0 +1,5 @@
+define sumTwoElements (Array Int, Int, Int) -> Int
+as (arr,i,j) :
+  x = $arrayIndex{Int}(arr,i)
+  y = $arrayIndex{Int}(arr,j)
+  $add(x,y)

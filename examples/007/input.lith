@@ -1,0 +1,6 @@
+define example Int -> Int
+as (e) :
+  arr = $arrayReplicate{Int}(10,e)
+  x = $arrayIndex{Int}(arr,0)
+  y = $arrayIndex{Int}(arr,1)
+  $add(x,y)

@@ -1,0 +1,8 @@
+signature Identifier where
+
+import Data.Text.Short (ShortText)
+
+data Identifier
+data IdentifierSet
+
+showSetAsSuffix :: IdentifierSet -> ShortText
