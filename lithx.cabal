@@ -51,6 +51,8 @@ library lithimpl
     FreshIdentifierMachineStateInt
     FunctionTypeAnnotationMaybe
     Order
+    C
+    Builder
   hs-source-dirs: src-impl
 
 library lithtype
@@ -383,6 +385,7 @@ library lithconstantfold
 executable lith
   import: lithcommon
   hs-source-dirs: app
+  other-modules: ToC
   main-is: Main.hs
   build-depends:
     , lithx:lithsyntax

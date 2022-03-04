@@ -1,0 +1,107 @@
+
+==================== Asm code ====================
+2022-03-03 19:37:29.740872916 UTC
+
+.section .text
+.align 8
+.align 8
+	.quad	4294967301
+	.quad	0
+	.long	14
+	.long	0
+.globl Input.example_info
+.type Input.example_info, @function
+Input.example_info:
+_cDw:
+	xorl %eax,%eax
+	xorl %ebx,%ebx
+	jmp _cDz
+_cDG:
+	movq 16(%r14,%rax,8),%rcx
+	shlq $1,%rcx
+	addq %rcx,%rbx
+	incq %rax
+_cDz:
+	cmpq $10,%rax
+	jl _cDG
+_cDH:
+	jmp *(%rbp)
+	.size Input.example_info, .-Input.example_info
+
+
+==================== Asm code ====================
+2022-03-03 19:37:29.741113831 UTC
+
+.section .data
+.align 8
+.align 1
+.globl Input.example_closure
+.type Input.example_closure, @object
+Input.example_closure:
+	.quad	Input.example_info
+
+
+==================== Asm code ====================
+2022-03-03 19:37:29.74122881 UTC
+
+.section .rodata.str,"aMS",@progbits,1
+.align 1
+.align 1
+.globl Input.$trModule4_bytes
+.type Input.$trModule4_bytes, @object
+Input.$trModule4_bytes:
+	.string "main"
+
+
+==================== Asm code ====================
+2022-03-03 19:37:29.741347339 UTC
+
+.section .data
+.align 8
+.align 1
+.globl Input.$trModule3_closure
+.type Input.$trModule3_closure, @object
+Input.$trModule3_closure:
+	.quad	GHC.Types.TrNameS_con_info
+	.quad	Input.$trModule4_bytes
+
+
+==================== Asm code ====================
+2022-03-03 19:37:29.742378053 UTC
+
+.section .rodata.str,"aMS",@progbits,1
+.align 1
+.align 1
+.globl Input.$trModule2_bytes
+.type Input.$trModule2_bytes, @object
+Input.$trModule2_bytes:
+	.string "Input"
+
+
+==================== Asm code ====================
+2022-03-03 19:37:29.742497199 UTC
+
+.section .data
+.align 8
+.align 1
+.globl Input.$trModule1_closure
+.type Input.$trModule1_closure, @object
+Input.$trModule1_closure:
+	.quad	GHC.Types.TrNameS_con_info
+	.quad	Input.$trModule2_bytes
+
+
+==================== Asm code ====================
+2022-03-03 19:37:29.742618843 UTC
+
+.section .data
+.align 8
+.align 1
+.globl Input.$trModule_closure
+.type Input.$trModule_closure, @object
+Input.$trModule_closure:
+	.quad	GHC.Types.Module_con_info
+	.quad	Input.$trModule3_closure+1
+	.quad	Input.$trModule1_closure+1
+	.quad	3
+

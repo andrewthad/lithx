@@ -4,6 +4,7 @@ import Control.Monad ((<=<))
 import Data.Eexpr.Text.Normal (normalText)
 import Control.Monad.Trans.State.Strict (evalStateT)
 import Data.Proxy
+import Data.Foldable (fold)
 
 import qualified Data.ByteString as B
 import qualified Data.Eexpr.Text as E
@@ -11,6 +12,7 @@ import qualified Data.Eexpr.Types as E
 import qualified Data.Text.IO as TIO
 import qualified Data.Map.Strict as Map
 import qualified Data.IntMap.Strict as IntMap
+import qualified Data.Text.Short as TS
 
 import Lith.Parse (parseFunction)
 import Lith.Resolve (resolveFunctionDeclaration)
@@ -33,6 +35,8 @@ import qualified Lith.ConstantFold.Show
 import qualified Lith.Term.Eq
 
 import qualified System.IO as IO
+import qualified C
+import qualified ToC
 
 main :: IO ()
 main = do
@@ -53,7 +57,11 @@ main = do
         resolved <- step2 funDecl
         datasolved <- step3 resolved
         _ <- step4 datasolved
-        _ <- optFixedPoint datasolved
+        decl <- optFixedPoint datasolved
+        TIO.putStrLn "================"
+        TIO.putStrLn "Compile to C"
+        TIO.putStrLn "================"
+        B.putStr (TS.toByteString (fold (C.encode 0 (ToC.compileFunction decl))))
         pure ()
 
 optFixedPoint :: Datasolved.FunctionDeclaration -> IO Datasolved.FunctionDeclaration
